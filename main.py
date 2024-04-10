@@ -2,17 +2,20 @@
 from typing import NoReturn
 import requests
 import re
-from fake_useragent import UserAgent
 from yt_dlp import YoutubeDL
+from threading import Thread
 
-def download_video(url : str):
-    with YoutubeDL({}) as ydl: ydl.download(url)
+def _download_video(url : str):
+    with YoutubeDL({"quiet": True}) as ydl: ydl.download(url)
+
+def download_video(url):
+    Thread(target=_download_video, args=[url]).start()
 
 def no_match_found(url: str, regex: str) -> NoReturn:
     raise Exception(f"no match found\nurl: {url}\nregex: {regex}")
 
 def search_in_response(url : str, regex : str) -> str:
-    headers = {"User-Agent": str(UserAgent().chrome)}
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"}
     r = requests.get(url=url, headers=headers)
     res = re.search(regex, r.text)
     return res.group(1) if res != None else no_match_found(url, regex)
@@ -60,6 +63,10 @@ corriere(url=url, regex=regex)
 
 url = "https://video.corriere.it/cronaca/fotosintesi-beppe-severgnini/"
 regex = r'"(https:\/\/video\.corriere\.it\/cronaca\/fotosintesi-beppe-severgnini\/.+\/[a-z0-9\-]+)"\n'
+corriere(url=url, regex=regex)
+
+url = "https://video.corriere.it/cronaca/palomar-antonio-polito/"
+regex = r'"(https:\/\/video\.corriere\.it\/cronaca\/palomar-antonio-polito\/.+\/[a-z0-9\-]+)"\n'
 corriere(url=url, regex=regex)
 
 if (input("download tg1?: ").lower() == "y"): tg1()
