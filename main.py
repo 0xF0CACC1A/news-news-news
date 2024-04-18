@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
+import os, re, requests, sys
 from typing import NoReturn
-import requests
-import re
-from yt_dlp import YoutubeDL
-from threading import Thread
 
-def _download_video(url : str):
-    with YoutubeDL({"quiet": True}) as ydl: ydl.download(url)
+def _download_video(url : str, out: str):
+    from yt_dlp import YoutubeDL
+    if os.fork() == 0:
+        devnull = open(os.devnull, 'r+')
+        sys.stdout = devnull
+        with YoutubeDL({'quiet': True, 'outtmpl': f'{out}'}) as ydl: ydl.download(url)
+        sys.stdout = sys.__stdout__
+        print(f"SCARICATO {out}!")
+        exit()
 
-def download_video(url):
-    Thread(target=_download_video, args=[url]).start()
+def download_video(url : str, out: str):
+    from threading import Thread
+    Thread(target=_download_video, args=[url, out]).start()
+    
+def time() -> str:
+    from datetime import datetime
+    return datetime.today().strftime('%Y-%m-%d-%H-%M-%S')
 
 def no_match_found(url: str, regex: str) -> NoReturn:
     raise Exception(f"no match found\nurl: {url}\nregex: {regex}")
@@ -26,7 +35,7 @@ def tg1():
 
     # https://stackoverflow.com/questions/35673914/indexerror-no-such-group-python
     url = search_in_response(url,  r'<!\[CDATA\[(.*)]]>')
-    download_video(url)
+    download_video(url, f"tg1_{time()}.mp4")
 
 def tgla7():
     url = "https://tg.la7.it/ultime-edizioni-del-tgla7"
@@ -34,13 +43,19 @@ def tgla7():
     latest_video = "https://tg.la7.it/" + search_in_response(url, regex)
 
     latest_video = search_in_response(latest_video, r'mp4: \"(.*\.mp4)"')    
-    download_video(latest_video)
+    download_video(latest_video, f"tgla7_{time()}.mp4")
 
 def corriere(url : str, regex: str):
     latest_video = search_in_response(url, regex)
+
+    latest_video_rev = latest_video[::-1]
+    regex = r'.*?\/(.*?)\/.*'
+    out = re.search(regex, latest_video_rev)
+    out = out.group(1)[::-1] if out != None else no_match_found(latest_video_rev, regex)
+
     if (input(f"download {latest_video}?: ").lower() == "y"):
         video_id = search_in_response(latest_video, r'privateId\": \"([a-zA-Z0-9\-]+)\"')
-        download_video("https://www.dailymotion.com/video/" + video_id)
+        download_video("https://www.dailymotion.com/video/" + video_id, f"{out}.mp4")
    
 def televideo(pg_num):
     url = f"https://www.televideo.rai.it/televideo/pub/catturaSottopagine.jsp?pagina={pg_num}&regione="
@@ -57,20 +72,26 @@ def televideo(pg_num):
     
     print("EMPTY") if len(solotesto) == 0 else print(solotesto)
 
-url = "https://video.corriere.it/esteri/oriente-occidente/"
-regex = r'"(https:\/\/video\.corriere\.it\/esteri\/oriente-occidente\/.+\/[a-z0-9\-]+)"\n'
-corriere(url=url, regex=regex)
+import subprocess
+subprocess.run('rm -f *.mp4 *.part *.ytdl', shell=True) # TODO brace expansion
 
-url = "https://video.corriere.it/cronaca/fotosintesi-beppe-severgnini/"
-regex = r'"(https:\/\/video\.corriere\.it\/cronaca\/fotosintesi-beppe-severgnini\/.+\/[a-z0-9\-]+)"\n'
-corriere(url=url, regex=regex)
+corriere_list = [
+("https://video.corriere.it/esteri/oriente-occidente/",
+r'"(https:\/\/video\.corriere\.it\/esteri\/oriente-occidente\/.+\/[a-z0-9\-]+)"\n'),
+("https://video.corriere.it/cronaca/fotosintesi-beppe-severgnini/",
+r'"(https:\/\/video\.corriere\.it\/cronaca\/fotosintesi-beppe-severgnini\/.+\/[a-z0-9\-]+)"\n'),
+("https://video.corriere.it/cronaca/palomar-antonio-polito/",
+r'"(https:\/\/video\.corriere\.it\/cronaca\/palomar-antonio-polito\/.+\/[a-z0-9\-]+)"\n'),
+("https://video.corriere.it/dataroom-milena-gabanelli/",
+r'"(https:\/\/video\.corriere\.it\/.+\/[a-z0-9\-]+)"\n')
+]
 
-url = "https://video.corriere.it/cronaca/palomar-antonio-polito/"
-regex = r'"(https:\/\/video\.corriere\.it\/cronaca\/palomar-antonio-polito\/.+\/[a-z0-9\-]+)"\n'
-corriere(url=url, regex=regex)
+for (url, regex) in corriere_list:
+    corriere(url=url, regex=regex)
 
 if (input("download tg1?: ").lower() == "y"): tg1()
 if (input("download tgla7?: ").lower() == "y"): tgla7()
 
+print("TELEVIDEO")
 while True:
     televideo(input())
